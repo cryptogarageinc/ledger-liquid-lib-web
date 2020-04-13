@@ -590,7 +590,7 @@ async function startUntrustedTransaction(transport, dectx, isContinue,
     }
     const header = Buffer.from([txinHead]);
     const txid = reverseBuffer(Buffer.from(dectx.vin[idx].txid, 'hex'));
-    const vout = Buffer.alloc(4);
+    let vout = Buffer.alloc(4);
     vout = writeUInt32LE(vout, dectx.vin[idx].vout, 0);
     // if ('issuance' in dectx.vin[idx]) {
     //   vout[3] |= 0x80;
@@ -603,7 +603,7 @@ async function startUntrustedTransaction(transport, dectx, isContinue,
       value = Buffer.from(amountValueList[idx], 'hex');
     }
     const script = Buffer.from(targetRedeemScript, 'hex');
-    const sequence = Buffer.alloc(4);
+    let sequence = Buffer.alloc(4);
     sequence = writeUInt32LE(sequence, dectx.vin[idx].sequence, 0);
     apdu = Buffer.concat([header, txid, vout, value,
       getVarIntBuffer(script.length)]);
