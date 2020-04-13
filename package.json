@@ -1,0 +1,33 @@
+{
+  "name": "ledger-liquid-lib-web",
+  "version": "0.0.1",
+  "description": "Ledger Hardware Wallet Liquid Wrapper Library for web",
+  "keywords": [
+    "Ledger",
+    "LedgerWallet",
+    "liquid",
+    "Elements",
+    "NanoS",
+    "Hardware Wallet"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cryptogarageinc/ledger-liquid-lib-web"
+  },
+  "main": "index.js",
+  "module": "index.js",
+  "dependencies": {
+    "@ledgerhq/hw-transport-webusb": "^5.11.0",
+    "ripemd160": "^2.0.2",
+    "sha.js": "^2.4.11",
+    "bs58": "^4.0.1"
+  },
+  "devDependencies": {
+    "npm-run-all": "^4.1.5",
+    "run-script-os": "^1.0.5"
+  },
+  "scripts": {
+    "format": "eslint --ext .js,.ts *.ts *.js src/ --fix",
+    "eslint_check": "eslint --ext .js,.ts *.ts *.js src/"
+  }
+}
