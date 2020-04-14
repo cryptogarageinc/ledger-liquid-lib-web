@@ -3,7 +3,7 @@
 // const TransportNodeHid = require('@ledgerhq/hw-transport-node-hid').default;
 const TransportWebUSB = require('@ledgerhq/hw-transport-webusb').default;
 // const cfdjs = require('cfd-js');
-const ripemd160 = require('ripemd160');
+const Ripemd160 = require('ripemd160');
 const sha = require('sha.js');
 const base58 = require('bs58');
 
@@ -14,10 +14,10 @@ function byteToString(buffer) {
 
 function byteToHexString(buffer) {
   // return buffer.toString('hex');
-  return Array.from(buffer).map(v => {
-      let str = v.toString(16);
-      if (str.length === 1) str = '0' + str;
-      return str;
+  return Array.from(buffer).map((v) => {
+    let str = v.toString(16);
+    if (str.length === 1) str = '0' + str;
+    return str;
   }).join('');
 }
 
@@ -78,10 +78,10 @@ function writeUInt16LE(buf, value, offset) {
 
 function writeUInt32LE(buf, value, offset) {
   const wrBuf = Buffer.from([
-      value & 0x00ff,
-      ((value >> 8) & 0x00ff),
-      ((value >> 16) & 0x00ff),
-      ((value >> 24) & 0x00ff),
+    value & 0x00ff,
+    ((value >> 8) & 0x00ff),
+    ((value >> 16) & 0x00ff),
+    ((value >> 24) & 0x00ff),
   ]);
   buf[offset] = wrBuf[0];
   buf[offset + 1] = wrBuf[1];
@@ -92,10 +92,10 @@ function writeUInt32LE(buf, value, offset) {
 
 function writeUInt32BE(buf, value, offset) {
   const wrBuf = Buffer.from([
-      ((value >> 24) & 0x00ff),
-      ((value >> 16) & 0x00ff),
-      ((value >> 8) & 0x00ff),
-      value & 0x00ff,
+    ((value >> 24) & 0x00ff),
+    ((value >> 16) & 0x00ff),
+    ((value >> 8) & 0x00ff),
+    value & 0x00ff,
   ]);
   buf[offset] = wrBuf[0];
   buf[offset + 1] = wrBuf[1];
@@ -106,7 +106,7 @@ function writeUInt32BE(buf, value, offset) {
 
 function hash160(buf) {
   const sha256Hash = sha('sha256').update(buf).digest();
-  return (new ripemd160()).update(sha256Hash).digest();
+  return (new Ripemd160()).update(sha256Hash).digest();
 }
 
 function sha256d(buf) {
@@ -115,18 +115,19 @@ function sha256d(buf) {
 }
 
 function encodeBase58Check(buf) {
-  const checksum = sha256d(buf)
+  const checksum = sha256d(buf);
   return base58.encode(Buffer.concat([buf, checksum], buf.length + 4));
 }
 
-function createExtPubKey(networkType, depth, childNumber, chainCode, publicKey, parentPubkey) {
-  let version = '043587cf';  // testnet
+function createExtPubKey(
+    networkType, depth, childNumber, chainCode, publicKey, parentPubkey) {
+  let version = '043587cf'; // testnet
   if ((networkType === 'mainnet') || (networkType === 'liquidv1')) {
-    version = '0488b21e';  // mainnet
+    version = '0488b21e'; // mainnet
   }
   const parentKeyBuf = Buffer.from(parentPubkey, 'hex');
   const fingerprint = byteToHexString(hash160(parentKeyBuf).subarray(0, 4));
-  let depthStr = byteToHexString(Buffer.from([depth]));
+  const depthStr = byteToHexString(Buffer.from([depth]));
   let numberBuf = Buffer.alloc(4);
   numberBuf = writeUInt32BE(numberBuf, childNumber, 0);
   const childStr = byteToHexString(numberBuf);
@@ -158,20 +159,30 @@ function readVarIntFromBuffer(buffer, startOffset) {
   return {value: result, size: size};
 }
 
+function reverseBuffer(buf) {
+  const buffer = Buffer.allocUnsafe(buf.length);
+  for (let i = 0, j = buf.length - 1; i <= j; ++i, --j) {
+    buffer[i] = buf[j];
+    buffer[j] = buf[i];
+  }
+  return buffer;
+}
+
 function decodeRawTransaction(proposalTx) {
   const buffer = Buffer.from(proposalTx, 'hex');
   const txin = [];
   const txout = [];
   const version = readUInt32LE(buffer, 0);
   let offset = 4;
-  const useWitness = (buffer[offset] !== 0);
+  // const useWitness = (buffer[offset] !== 0);
   ++offset;
 
   const txinVarNum = readVarIntFromBuffer(buffer, offset);
   const txinNum = txinVarNum.value;
   offset += txinVarNum.size;
   for (let index = 0; index < txinNum; ++index) {
-    const txid = byteToHexString(reverseBuffer(buffer.subarray(offset, offset + 32)));
+    const txid = byteToHexString(
+        reverseBuffer(buffer.subarray(offset, offset + 32)));
     offset += 32;
     const utxoVout = readUInt32LE(buffer, offset);
     offset += 4;
@@ -181,16 +192,17 @@ function decodeRawTransaction(proposalTx) {
     offset += scriptsigLen;
     const sequence = readUInt32LE(buffer, offset);
     offset += 4;
-    let txinData = {
+    const txinData = {
       txid: txid,
       vout: utxoVout & 0x3fffffff,
       sequence: sequence,
     };
     if ((utxoVout & 0x80000000) !== 0) {
-      const assetBlindingNonce = byteToHexString(buffer.subarray(offset, offset + 32));
-      offset = offset + 32;
-      const assetEntropyArr = buffer.subarray(offset, offset + 32);
-      const assetEntropy = byteToHexString(assetEntropyArr);
+      const assetBlindingNonce = byteToHexString(
+          reverseBuffer(buffer.subarray(offset, offset + 32)));
+      offset += 32;
+      const assetEntropy = byteToHexString(
+          reverseBuffer(buffer.subarray(offset, offset + 32)));
       offset += 32;
       let assetAmount;
       if (buffer[offset] <= 1) {
@@ -211,11 +223,20 @@ function decodeRawTransaction(proposalTx) {
         token = byteToHexString(buffer.subarray(offset, offset + 33));
         offset += 33;
       }
-      let issuance = {
+      let issuance;
+      if (assetBlindingNonce === '0000000000000000000000000000000000000000000000000000000000000000') {
+        issuance = {
+          assetBlindingNonce: assetBlindingNonce,
+          contractHash: assetEntropy,
+          assetamountcommitment: assetAmount,
+        };
+      } else {
+        issuance = {
           assetBlindingNonce: assetBlindingNonce,
           assetEntropy: assetEntropy,
           assetamountcommitment: assetAmount,
-      };
+        };
+      }
       if (token) {
         issuance['tokenamountcommitment'] = token;
       }
@@ -283,13 +304,10 @@ function decodeRawTransaction(proposalTx) {
   return {
     version: version,
     locktime: locktime,
-    vin: txin, // txid, vout, sequence, issuance{}
-    // assetBlindingNonce, assetEntropy, assetamount,
-    // assetamountcommitment, tokenamount, tokenamountcommitment
-    vout: txout, // asset, value, scriptPubKey{hex}
-    // assetcommitment, valuecommitment, commitmentnonce
+    vin: txin,
+    vout: txout,
   };
-;
+  ;
 }
 
 // ---- ledger-liquid-lib ----
@@ -301,15 +319,6 @@ function convertErrorCode(buf) {
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 function debugSendLog(funcName, buffer) {
   // console.log(funcName, buffer.toString('hex'));
-}
-
-function reverseBuffer(buf) {
-  const buffer = Buffer.allocUnsafe(buf.length);
-  for (let i = 0, j = buf.length - 1; i <= j; ++i, --j) {
-    buffer[i] = buf[j];
-    buffer[j] = buf[i];
-  }
-  return buffer;
 }
 
 function getVarIntBuffer(num) {
@@ -725,7 +734,6 @@ async function untrustedHashSign(transport, dectx, path, pin, sigHashType) {
   return result;
 }
 
-
 async function sendProvideIssuanceInformationCmd(
     transport, data, p1) {
   const CLA = 0xe0;
@@ -764,10 +772,17 @@ async function liquidProvideIssuanceInformation(transport, dectx) {
     const p1 = (idx === (dectx.vin.length - 1)) ? 0x80 : 0x00;
     if ('issuance' in dectx.vin[idx]) {
       const issuance = dectx.vin[idx].issuance;
-      data = Buffer.concat([
-        reverseBuffer(Buffer.from(issuance.assetBlindingNonce, 'hex')),
-        reverseBuffer(Buffer.from(issuance.assetEntropy, 'hex')),
-      ]);
+      if ('contractHash' in issuance) {
+        data = Buffer.concat([
+          reverseBuffer(Buffer.from(issuance.assetBlindingNonce, 'hex')),
+          reverseBuffer(Buffer.from(issuance.contractHash, 'hex')),
+        ]);
+      } else {
+        data = Buffer.concat([
+          reverseBuffer(Buffer.from(issuance.assetBlindingNonce, 'hex')),
+          reverseBuffer(Buffer.from(issuance.assetEntropy, 'hex')),
+        ]);
+      }
       if ('assetamount' in issuance) {
         data = Buffer.concat([
           data,
@@ -833,7 +848,7 @@ function compressPubkey(publicKey) {
   const pubkeyArr = Buffer.from(publicKey, 'hex');
   if (pubkeyArr.length === 33) return publicKey;
   const prefix = (pubkeyArr[64] & 1) !== 0 ? 0x03 : 0x02;
-  let pubkeySubArr = pubkeyArr.subarray(0, 1 + 32);
+  const pubkeySubArr = pubkeyArr.subarray(0, 1 + 32);
   pubkeySubArr[0] = prefix;
   return byteToHexString(pubkeySubArr);
 }
@@ -855,7 +870,7 @@ const ledgerLiquidWrapper = class LedgerLiquidWrapper {
     let ecode = disconnectEcode;
     let errMsg = 'other error';
     try {
-//      devList = await TransportNodeHid.list();
+      //      devList = await TransportNodeHid.list();
       devList = await TransportWebUSB.list();
       ecode = 0x9000;
       errMsg = '';
@@ -865,6 +880,7 @@ const ledgerLiquidWrapper = class LedgerLiquidWrapper {
     return {
       success: (ecode === 0x9000),
       errorCode: ecode,
+      errorCodeHex: ecode.toString(16),
       errorMessage: errMsg,
       disconnect: false,
       deviceList: devList,
@@ -880,6 +896,7 @@ const ledgerLiquidWrapper = class LedgerLiquidWrapper {
     this.waitForConnecting = true;
     const waitLimit = (typeof maxWaitTime === 'number') ? maxWaitTime : 0xffffffff;
     const path = (typeof devicePath === 'string') ? devicePath : '';
+    console.info(`connection path=${path}`);
     let transport = undefined;
     let count = (waitLimit <= 0) ? 0 : 1;
     let ecode = disconnectEcode;
@@ -934,6 +951,7 @@ const ledgerLiquidWrapper = class LedgerLiquidWrapper {
     return {
       success: (ecode === 0x9000),
       errorCode: ecode,
+      errorCodeHex: ecode.toString(16),
       errorMessage: errMsg,
       disconnect: (ecode === disconnectEcode),
     };
@@ -970,6 +988,7 @@ const ledgerLiquidWrapper = class LedgerLiquidWrapper {
     return {
       success: (ecode === 0x9000),
       errorCode: ecode,
+      errorCodeHex: ecode.toString(16),
       errorMessage: errMsg,
       disconnect: (ecode === disconnectEcode),
     };
@@ -993,9 +1012,9 @@ const ledgerLiquidWrapper = class LedgerLiquidWrapper {
     const hash160Buf = hash160(pubkeyArr);
     // OP_DUP OP_HASH160 <20byte-hash> OP_EQUALVERIFY OP_CHECKSIG
     const buf = Buffer.concat([
-        Buffer.from([0x76, 0xa9, 0x14]),
-        hash160Buf,
-        Buffer.from([0x88, 0xac]),
+      Buffer.from([0x76, 0xa9, 0x14]),
+      hash160Buf,
+      Buffer.from([0x88, 0xac]),
     ]);
     return byteToHexString(buf);
   }
@@ -1019,6 +1038,7 @@ const ledgerLiquidWrapper = class LedgerLiquidWrapper {
     return {
       success: (ecode === 0x9000),
       errorCode: ecode,
+      errorCodeHex: ecode.toString(16),
       errorMessage: errMsg,
       disconnect: connRet.disconnect,
       publicKey: (!result) ? '' : compressPubkey(result.pubkey),
@@ -1053,22 +1073,23 @@ const ledgerLiquidWrapper = class LedgerLiquidWrapper {
               pubkey.chainCode,
               compressPubkey(pubkey.pubkey),
               compressPubkey(parent.pubkey));
-//          const extkey = cfdjs.CreateExtkey({
-//            network: this.mainchainNetwork,
-//            extkeyType: 'extPubkey',
-//            parentKey: compressPubkey(parent.pubkey),
-//            key: compressPubkey(pubkey.pubkey),
-//            chainCode: pubkey.chainCode,
-//            depth: pathArr.length,
-//            childNumber: pathArr[pathArr.length - 1],
-//          });
-//          xpub = extkey.extkey;
+          //          const extkey = cfdjs.CreateExtkey({
+          //            network: this.mainchainNetwork,
+          //            extkeyType: 'extPubkey',
+          //            parentKey: compressPubkey(parent.pubkey),
+          //            key: compressPubkey(pubkey.pubkey),
+          //            chainCode: pubkey.chainCode,
+          //            depth: pathArr.length,
+          //            childNumber: pathArr[pathArr.length - 1],
+          //          });
+          //          xpub = extkey.extkey;
         }
       }
     }
     return {
       success: (ecode === 0x9000),
       errorCode: ecode,
+      errorCodeHex: ecode.toString(16),
       errorMessage: errMsg,
       disconnect: connRet.disconnect,
       xpubKey: (!xpub) ? '' : xpub,
@@ -1078,7 +1099,7 @@ const ledgerLiquidWrapper = class LedgerLiquidWrapper {
   // unuse
   async getAddress(bip32Path, addressFormat) {
     let result = undefined;
-    let addressRet = undefined;
+    const addressRet = undefined;
     let pubkeyRet = undefined;
     const connRet = await this.isConnected();
     let ecode = connRet.errorCode;
@@ -1087,23 +1108,27 @@ const ledgerLiquidWrapper = class LedgerLiquidWrapper {
       pubkeyRet = await this.getWalletPublicKey(bip32Path);
       result = pubkeyRet;
       if (pubkeyRet.success) {
-        let hashType = 'p2sh-p2wpkh';
+        // let hashType = 'p2sh-p2wpkh';
+        // if (addressFormat === 'bech32') {
+        //   hashType = 'p2wpkh';
+        // } else if (addressFormat === 'legacy') {
+        //   hashType = 'p2pkh';
+        // }
+        // addressRet = cfdjs.CreateAddress({
+        //   keyData: {
+        //     hex: pubkeyRet.publicKey,
+        //     type: 'pubkey',
+        //   },
+        //   network: this.networkType,
+        //   isElements: true,
+        //   hashType: hashType,
+        // });
+        // result = pubkeyRet;
         if (addressFormat === 'bech32') {
-          hashType = 'p2wpkh';
-        } else if (addressFormat === 'legacy') {
-          hashType = 'p2pkh';
+          result = {errorCode: 0x6000};
+        } else {
+          result = {errorCode: 0x6000};
         }
-//        addressRet = cfdjs.CreateAddress({
-//          keyData: {
-//            hex: pubkeyRet.publicKey,
-//            type: 'pubkey',
-//          },
-//          network: this.networkType,
-//          isElements: true,
-//          hashType: hashType,
-//        });
-//        result = pubkeyRet;
-        result = {errorCode: 0x6000};
       }
       ecode = result.errorCode;
       errMsg = (ecode === 0x9000) ? '' : 'other error';
@@ -1111,6 +1136,7 @@ const ledgerLiquidWrapper = class LedgerLiquidWrapper {
     return {
       success: (ecode === 0x9000),
       errorCode: ecode,
+      errorCodeHex: ecode.toString(16),
       errorMessage: errMsg,
       disconnect: connRet.disconnect,
       publicKey: (!pubkeyRet) ? '' : compressPubkey(pubkeyRet.pubkey),
@@ -1134,20 +1160,21 @@ const ledgerLiquidWrapper = class LedgerLiquidWrapper {
     return {
       success: (ecode === 0x9000),
       errorCode: ecode,
+      errorCodeHex: ecode.toString(16),
       errorMessage: errMsg,
       disconnect: connRet.disconnect,
     };
   }
 
-//  interface WalletUtxoData extends UtxoData {
-//    bip32Path: string; // key-1(bip32 path)
-//    txid: string; // key(outpoint)
-//    vout: number; // key(outpoint)
-//    amount?: bigint | number;
-//    valueCommitment?: string;
-//    pubkey?: string; // pubkey.
-//    redeemScript?: string; // redeem script.
-//  }
+  //  interface WalletUtxoData extends UtxoData {
+  //    bip32Path: string; // key-1(bip32 path)
+  //    txid: string; // key(outpoint)
+  //    vout: number; // key(outpoint)
+  //    amount?: bigint | number;
+  //    valueCommitment?: string;
+  //    pubkey?: string; // pubkey.
+  //    redeemScript?: string; // redeem script.
+  //  }
 
   decodeRawTransaction(proposalTx) {
     return decodeRawTransaction(proposalTx);
@@ -1161,14 +1188,15 @@ const ledgerLiquidWrapper = class LedgerLiquidWrapper {
       return {
         success: connRet.success,
         errorCode: connRet.errorCode,
+        errorCodeHex: connRet.errorCode.toString(16),
         errorMessage: connRet.errorMessage,
         disconnect: connRet.disconnect,
         signatureList: signatureList,
       };
     }
-//    const dectx = cfdjs.ElementsDecodeRawTransaction({
-//      hex: proposalTransaction, network: this.networkType,
-//      mainchainNetwork: this.mainchainNetwork});
+    //    const dectx = cfdjs.ElementsDecodeRawTransaction({
+    //      hex: proposalTransaction, network: this.networkType,
+    //      mainchainNetwork: this.mainchainNetwork});
     const dectx = decodeRawTransaction(proposalTransaction);
     // console.log('*** dectx ***\n', JSON.stringify(dectx, null, '  '));
 
@@ -1219,15 +1247,15 @@ const ledgerLiquidWrapper = class LedgerLiquidWrapper {
       } else if (!utxo.descriptor) {
         redeemScript = utxo.redeemScript;
       } else {
-//        const desc = cfdjs.ParseDescriptor({
-//          isElements: true,
-//          descriptor: utxo.descriptor,
-//          network: this.networkType,
-//        });
-//        if (('scripts' in desc) && (desc.scripts.length > 0) &&
-//            ('redeemScript' in desc.scripts[desc.scripts.length - 1])) {
-//          redeemScript = desc.scripts[desc.scripts.length - 1].redeemScript;
-//        }
+        //        const desc = cfdjs.ParseDescriptor({
+        //          isElements: true,
+        //          descriptor: utxo.descriptor,
+        //          network: this.networkType,
+        //        });
+        //        if (('scripts' in desc) && (desc.scripts.length > 0) &&
+        //            ('redeemScript' in desc.scripts[desc.scripts.length - 1])) {
+        //          redeemScript = desc.scripts[desc.scripts.length - 1].redeemScript;
+        //        }
       }
 
       if (!redeemScript) {
@@ -1287,6 +1315,7 @@ const ledgerLiquidWrapper = class LedgerLiquidWrapper {
     return {
       success: (ecode === 0x9000),
       errorCode: ecode,
+      errorCodeHex: ecode.toString(16),
       errorMessage: (ecode === 0x9000) ? '' : 'other error.',
       disconnect: false,
       signatureList: signatureList,
