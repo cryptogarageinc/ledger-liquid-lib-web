@@ -891,7 +891,7 @@ const ledgerLiquidWrapper = class LedgerLiquidWrapper {
     const sleep = (msec) => new Promise(
         (resolve) => setTimeout(resolve, msec));
 
-    if (this.transport) await this.transport.close();
+    if (this.transport) await close(this.transport);
 
     this.waitForConnecting = true;
     const waitLimit = (typeof maxWaitTime === 'number') ? maxWaitTime : 0xffffffff;
@@ -924,6 +924,12 @@ const ledgerLiquidWrapper = class LedgerLiquidWrapper {
           // device connect error
         } else if (errText.indexOf('cannot open device with path') >= 0) {
           // device connect error
+        } else if (errText.indexOf('The device was disconnected') >= 0) {
+          // device connect error
+        } else if (errText.indexOf('Must be handing a user gesture to show a permission request') >= 0) {
+          // device connect error
+        } else if (errText.indexOf('No device selected.') >= 0) {
+          // disconnect error
         } else {
           console.warn(e);
           console.log(`connection fail.(exception) count=${count}`, e);
@@ -972,6 +978,12 @@ const ledgerLiquidWrapper = class LedgerLiquidWrapper {
           // disconnect error
         } else if (errText.indexOf('TransportError: NoDevice') >= 0) {
           // device connect error
+        } else if (errText.indexOf('The device was disconnected.') >= 0) {
+          // device connect error
+        } else if (errText.indexOf('Must be handing a user gesture to show a permission request') >= 0) {
+          // device connect error
+        } else if (errText.indexOf('No device selected.') >= 0) {
+          // disconnect error
         } else {
           console.log(`connection fail.(exception) `, e);
           ecode = 0x8000;
@@ -1003,7 +1015,7 @@ const ledgerLiquidWrapper = class LedgerLiquidWrapper {
 
   async close(transport) {
     if (transport !== undefined) {
-      await transport.close();
+      // await transport.close();
     }
   }
 
