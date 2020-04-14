@@ -926,7 +926,7 @@ const ledgerLiquidWrapper = class LedgerLiquidWrapper {
           // device connect error
         } else if (errText.indexOf('The device was disconnected') >= 0) {
           // device connect error
-        } else if (errText.indexOf('Must be handing a user gesture to show a permission request') >= 0) {
+        } else if (errText.indexOf('Must be handling a user gesture to show a permission request') >= 0) {
           // device connect error
         } else if (errText.indexOf('No device selected.') >= 0) {
           // disconnect error
@@ -980,7 +980,7 @@ const ledgerLiquidWrapper = class LedgerLiquidWrapper {
           // device connect error
         } else if (errText.indexOf('The device was disconnected.') >= 0) {
           // device connect error
-        } else if (errText.indexOf('Must be handing a user gesture to show a permission request') >= 0) {
+        } else if (errText.indexOf('Must be handling a user gesture to show a permission request') >= 0) {
           // device connect error
         } else if (errText.indexOf('No device selected.') >= 0) {
           // disconnect error
