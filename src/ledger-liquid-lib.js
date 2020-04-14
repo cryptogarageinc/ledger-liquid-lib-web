@@ -891,10 +891,10 @@ const ledgerLiquidWrapper = class LedgerLiquidWrapper {
     const sleep = (msec) => new Promise(
         (resolve) => setTimeout(resolve, msec));
 
-    if (this.transport) await close(this.transport);
+    if (this.transport) await this.close(this.transport);
 
     this.waitForConnecting = true;
-    const waitLimit = (typeof maxWaitTime === 'number') ? maxWaitTime : 0xffffffff;
+    const waitLimit = (typeof maxWaitTime === 'number') ? maxWaitTime : 0;
     const path = (typeof devicePath === 'string') ? devicePath : '';
     console.info(`connection path=${path}`);
     let transport = undefined;
@@ -912,7 +912,7 @@ const ledgerLiquidWrapper = class LedgerLiquidWrapper {
           break;
         } else if (ecode !== disconnectEcode) {
           console.log('illegal error. ', ecode);
-          await close(transport);
+          await this.close(transport);
           break;
         }
       } catch (e) {
@@ -937,7 +937,7 @@ const ledgerLiquidWrapper = class LedgerLiquidWrapper {
           break;
         }
       }
-      if (transport) await close(transport);
+      if (transport) await this.close(transport);
       transport = undefined;
       console.info(`connection fail. count=${count}`);
       ++count;
@@ -1008,14 +1008,14 @@ const ledgerLiquidWrapper = class LedgerLiquidWrapper {
 
   async disconnect() {
     if (this.transport !== undefined) {
-      await close(transport);
+      await this.close(transport);
       this.transport = undefined;
     }
   }
 
   async close(transport) {
     if (transport !== undefined) {
-      // await transport.close();
+      await transport.close();
     }
   }
 
