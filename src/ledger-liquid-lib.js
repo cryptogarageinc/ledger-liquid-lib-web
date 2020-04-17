@@ -1008,7 +1008,7 @@ const ledgerLiquidWrapper = class LedgerLiquidWrapper {
 
   async disconnect() {
     if (this.transport !== undefined) {
-      await this.close(transport);
+      await this.close(this.transport);
       this.transport = undefined;
     }
   }
