@@ -133,16 +133,6 @@ export class LedgerLiquidWrapper {
    */
   getXpubKey(bip32Path: string): Promise<GetXpubKeyResponse>;
 
-  /*
-   * Get address with ledger wallet.
-   *
-   * @param bip32Path bip32 path.
-   * @param addressType address type.
-   * @returns GetAddressResponse wrapped promise.
-   */
-  getAddress(bip32Path: string, addressType: AddressType):
-    Promise<GetAddressResponse>;
-
   /**
    * Get signed signature.
    *

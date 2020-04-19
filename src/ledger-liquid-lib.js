@@ -1108,55 +1108,6 @@ const ledgerLiquidWrapper = class LedgerLiquidWrapper {
     };
   }
 
-  // unuse
-  async getAddress(bip32Path, addressFormat) {
-    let result = undefined;
-    const addressRet = undefined;
-    let pubkeyRet = undefined;
-    const connRet = await this.isConnected();
-    let ecode = connRet.errorCode;
-    let errMsg = connRet.errorMessage;
-    if (connRet.success) {
-      pubkeyRet = await this.getWalletPublicKey(bip32Path);
-      result = pubkeyRet;
-      if (pubkeyRet.success) {
-        // let hashType = 'p2sh-p2wpkh';
-        // if (addressFormat === 'bech32') {
-        //   hashType = 'p2wpkh';
-        // } else if (addressFormat === 'legacy') {
-        //   hashType = 'p2pkh';
-        // }
-        // addressRet = cfdjs.CreateAddress({
-        //   keyData: {
-        //     hex: pubkeyRet.publicKey,
-        //     type: 'pubkey',
-        //   },
-        //   network: this.networkType,
-        //   isElements: true,
-        //   hashType: hashType,
-        // });
-        // result = pubkeyRet;
-        if (addressFormat === 'bech32') {
-          result = {errorCode: 0x6000};
-        } else {
-          result = {errorCode: 0x6000};
-        }
-      }
-      ecode = result.errorCode;
-      errMsg = (ecode === 0x9000) ? '' : 'other error';
-    }
-    return {
-      success: (ecode === 0x9000),
-      errorCode: ecode,
-      errorCodeHex: ecode.toString(16),
-      errorMessage: errMsg,
-      disconnect: connRet.disconnect,
-      publicKey: (!pubkeyRet) ? '' : compressPubkey(pubkeyRet.pubkey),
-      chainCode: (!pubkeyRet) ? '' : pubkeyRet.chainCode,
-      address: (!addressRet) ? '' : addressRet.address,
-    };
-  }
-
   async setupHeadlessAuthorization(authorizationPublicKey) {
     const connRet = await this.isConnected();
     let ecode = connRet.errorCode;
