@@ -870,7 +870,7 @@ const ledgerLiquidWrapper = class LedgerLiquidWrapper {
     let ecode = disconnectEcode;
     let errMsg = 'other error';
     try {
-      //      devList = await TransportNodeHid.list();
+      // devList = await TransportNodeHid.list();
       devList = await TransportWebUSB.list();
       ecode = 0x9000;
       errMsg = '';
@@ -896,7 +896,7 @@ const ledgerLiquidWrapper = class LedgerLiquidWrapper {
     this.waitForConnecting = true;
     const waitLimit = (typeof maxWaitTime === 'number') ? maxWaitTime : 0;
     const path = (typeof devicePath === 'string') ? devicePath : '';
-    console.info(`connection path=${path}`);
+    console.info('connection device:', (!path) ? 'auto' : path);
     let transport = undefined;
     let count = (waitLimit < 1) ? 0 : 1;
     let ecode = disconnectEcode;
@@ -934,6 +934,7 @@ const ledgerLiquidWrapper = class LedgerLiquidWrapper {
           console.warn(e);
           console.log(`connection fail.(exception) count=${count}`, e);
           ecode = 0x6000;
+          errMsg = errText;
           break;
         }
       }
