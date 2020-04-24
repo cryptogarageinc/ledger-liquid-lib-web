@@ -347,8 +347,8 @@ function convertValueFromAmount(amount) {
   let high;
   let low;
   if (typeof amount === 'bigint') {
-    const bigHigh = (amount > 0xffffffffn) ? (amount >> 32n) : 0n;
-    const bigLow = amount & 0xffffffffn;
+    const bigHigh = (amount > BigInt(0xffffffff)) ? (amount >> BigInt(32)) : BigInt(0);
+    const bigLow = amount & BigInt(0xffffffff);
     high = Number(bigHigh);
     low = Number(bigLow);
   } else {
