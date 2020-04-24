@@ -347,8 +347,9 @@ function convertValueFromAmount(amount) {
   let high;
   let low;
   if (typeof amount === 'bigint') {
-    const bigHigh = (amount > 0xffffffffn) ? (amount >> 32n) : 0n;
-    const bigLow = amount & 0xffffffffn;
+    const bigHigh = (amount > BigInt(0xffffffff)) ?
+        (amount >> BigInt(32)) : BigInt(0);
+    const bigLow = amount & BigInt(0xffffffff);
     high = Number(bigHigh);
     low = Number(bigLow);
   } else {
@@ -829,12 +830,18 @@ async function checkConnect(transport) {
   // console.timeEnd('call getCoinVersion');
   // console.log('getCoinVersion =', result);
   if (result.errorCode === 0x9000) {
-    if ((result.prefixP2pkh === 0xeb) &&
+    if ((result.prefixP2pkh === 0x39) &&
+        (result.prefixP2sh === 0x27) &&
+        (result.coinFamily === 0x01) &&
+        (result.coinName === 'Bitcoin') &&
+        (result.coinTicker === 'BTC')) {
+      // liquid mainnet
+    } else if ((result.prefixP2pkh === 0xeb) &&
         (result.prefixP2sh === 0x4b) &&
         (result.coinFamily === 0x01) &&
         (result.coinName === 'Bitcoin') &&
         (result.coinTicker === 'BTC')) {
-      // liquid
+      // liquid testnet
     } else {
       return disconnectEcode;
     }
