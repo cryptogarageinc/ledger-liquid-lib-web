@@ -7,6 +7,11 @@ const Ripemd160 = require('ripemd160');
 const sha = require('sha.js');
 const base58 = require('bs58');
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function debugSendLog(funcName, buffer) {
+  // console.log(funcName, buffer.toString('hex'));
+}
+
 function byteToString(buffer) {
   // return buffer.toString();
   return (new TextDecoder).decode(buffer);
@@ -316,11 +321,6 @@ function convertErrorCode(buf) {
   return readUInt16BE(buf, 0);
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function debugSendLog(funcName, buffer) {
-  // console.log(funcName, buffer.toString('hex'));
-}
-
 function getVarIntBuffer(num) {
   let buf;
   if (num < 0xfd) {
@@ -602,9 +602,9 @@ async function startUntrustedTransaction(transport, dectx, isContinue,
     const txid = reverseBuffer(Buffer.from(dectx.vin[idx].txid, 'hex'));
     let vout = Buffer.alloc(4);
     vout = writeUInt32LE(vout, dectx.vin[idx].vout, 0);
-    // if ('issuance' in dectx.vin[idx]) {
-    //   vout[3] |= 0x80;
-    // }
+    if ('issuance' in dectx.vin[idx]) {
+      vout[3] |= 0x80;
+    }
     let value;
     if ((typeof amountValueList[idx] === 'number') ||
         (typeof amountValueList[idx] === 'bigint')) {
@@ -631,6 +631,53 @@ async function startUntrustedTransaction(transport, dectx, isContinue,
       }
     } else {
       errData = await sendHashInputStartCmd(transport, p1, p2, sequence);
+      if (errData.errorCode != 0x9000) {
+        console.log('fail sendHashInputStartCmd2', errData);
+        break;
+      }
+    }
+
+    if ((inputIndex !== -1) && ('issuance' in dectx.vin[idx])) {
+      let data;
+      const issuance = dectx.vin[idx].issuance;
+      if ('contractHash' in issuance) {
+        data = Buffer.concat([
+          reverseBuffer(Buffer.from(issuance.assetBlindingNonce, 'hex')),
+          reverseBuffer(Buffer.from(issuance.contractHash, 'hex')),
+        ]);
+      } else {
+        data = Buffer.concat([
+          reverseBuffer(Buffer.from(issuance.assetBlindingNonce, 'hex')),
+          reverseBuffer(Buffer.from(issuance.assetEntropy, 'hex')),
+        ]);
+      }
+      if ('assetamount' in issuance) {
+        data = Buffer.concat([
+          data,
+          convertValueFromAmount(issuance.assetamount),
+        ]);
+      } else if ('assetamountcommitment' in issuance) {
+        data = Buffer.concat([
+          data,
+          Buffer.from(issuance.assetamountcommitment, 'hex'),
+        ]);
+      } else {
+        data = Buffer.concat([data, Buffer.alloc(1)]);
+      }
+      if ('tokenamount' in issuance) {
+        data = Buffer.concat([
+          data,
+          convertValueFromAmount(issuance.tokenamount),
+        ]);
+      } else if ('tokenamountcommitment' in issuance) {
+        data = Buffer.concat([
+          data,
+          Buffer.from(issuance.tokenamountcommitment, 'hex'),
+        ]);
+      } else {
+        data = Buffer.concat([data, Buffer.alloc(1)]);
+      }
+      errData = await sendHashInputStartCmd(transport, p1, p2, data);
       if (errData.errorCode != 0x9000) {
         console.log('fail sendHashInputStartCmd2', errData);
         break;
@@ -823,30 +870,47 @@ async function liquidProvideIssuanceInformation(transport, dectx) {
 }
 
 const disconnectEcode = 0x6d00; // INS_NOT_SUPPORTED
+const accessingEcode = 0x9999;
+const accessingMsg = 'accessing other command';
 
-async function checkConnect(transport) {
+const applicationType = {
+  LiquidV1: 'liquidv1',
+  Regtest: 'regtest',
+  Auto: 'auto',
+};
+
+async function checkConnect(transport, checkAppType) {
   // console.time('call getCoinVersion');
   const result = await getCoinVersion(transport);
   // console.timeEnd('call getCoinVersion');
   // console.log('getCoinVersion =', result);
+  let connectApp = applicationType.Auto;
+  let ecode = result.errorCode;
   if (result.errorCode === 0x9000) {
     if ((result.prefixP2pkh === 0x39) &&
         (result.prefixP2sh === 0x27) &&
         (result.coinFamily === 0x01) &&
         (result.coinName === 'Bitcoin') &&
-        (result.coinTicker === 'BTC')) {
+        (result.coinTicker === 'BTC') &&
+        (checkAppType !== applicationType.Regtest)) {
       // liquid mainnet
+      connectApp = applicationType.LiquidV1;
     } else if ((result.prefixP2pkh === 0xeb) &&
         (result.prefixP2sh === 0x4b) &&
         (result.coinFamily === 0x01) &&
         (result.coinName === 'Bitcoin') &&
-        (result.coinTicker === 'BTC')) {
+        (result.coinTicker === 'BTC') &&
+        (checkAppType !== applicationType.LiquidV1)) {
       // liquid testnet
+      connectApp = applicationType.Regtest;
     } else {
-      return disconnectEcode;
+      ecode = disconnectEcode;
     }
   }
-  return result.errorCode;
+  return {
+    errorCode: ecode,
+    application: connectApp,
+  };
 }
 
 function compressPubkey(publicKey) {
@@ -860,16 +924,55 @@ function compressPubkey(publicKey) {
   return byteToHexString(pubkeySubArr);
 }
 
+const networkTypeDefine = {
+  LiquidV1: 'liquidv1',
+  Regtest: 'regtest',
+};
+
+const addressType = {
+  Legacy: 'legacy',
+  P2shSegwit: 'p2sh-segwit',
+  Bech32: 'bech32',
+};
+
+const currentApplicationType = {
+  LiquidHeadless: 'Liquid Hless',
+  LiquidTestHeadless: 'Liquid Test Hless',
+  Empty: '',
+};
+
 const ledgerLiquidWrapper = class LedgerLiquidWrapper {
-  constructor(networkType) {
+  constructor(networkType, checkApplication = false) {
     this.transport = undefined;
-    if ((networkType !== 'liquidv1') && (networkType !== 'regtest')) {
+    if ((networkType !== networkTypeDefine.LiquidV1) &&
+        (networkType !== networkTypeDefine.Regtest)) {
       throw new Error('illegal network type.');
     }
+    let checkAppType = applicationType.Auto;
+    if (checkApplication && checkApplication === true) {
+      if (networkType === networkTypeDefine.LiquidV1) {
+        checkAppType = applicationType.LiquidV1;
+      } else {
+        checkAppType = applicationType.Regtest;
+      }
+    }
     this.networkType = networkType;
-    this.mainchainNetwork = (networkType === 'regtest') ?
+    this.mainchainNetwork = (networkType === networkTypeDefine.Regtest) ?
         'regtest' : 'mainnet';
     this.waitForConnecting = false;
+    this.accessing = false;
+    this.checkAppType = checkAppType;
+    this.currentApplication = applicationType.Auto;
+  }
+
+  getCurrentApplication() {
+    if (this.currentApplication === applicationType.LiquidV1) {
+      return currentApplicationType.LiquidHeadless;
+    } else if (this.currentApplication === applicationType.Regtest) {
+      return currentApplicationType.LiquidTestHeadless;
+    } else {
+      return currentApplicationType.Empty;
+    }
   }
 
   async getDeviceList() {
@@ -894,13 +997,14 @@ const ledgerLiquidWrapper = class LedgerLiquidWrapper {
     };
   }
 
+  isAccessing() {
+    return this.accessing;
+  }
+
   async connect(maxWaitTime = undefined, devicePath = undefined) {
     const sleep = (msec) => new Promise(
         (resolve) => setTimeout(resolve, msec));
 
-    if (this.transport) await this.close(this.transport);
-
-    this.waitForConnecting = true;
     const waitLimit = (typeof maxWaitTime === 'number') ? maxWaitTime : 0;
     const path = (typeof devicePath === 'string') ? devicePath : '';
     console.info('connection device:', (!path) ? 'auto' : path);
@@ -908,60 +1012,91 @@ const ledgerLiquidWrapper = class LedgerLiquidWrapper {
     let count = (waitLimit < 1) ? 0 : 1;
     let ecode = disconnectEcode;
     let errMsg = 'other error';
-    while ((count <= waitLimit) && this.waitForConnecting) {
-      try {
-        // transport = await TransportNodeHid.open(path);
-        transport = await TransportWebUSB.create();
-
-        ecode = await checkConnect(transport);
-        if (ecode === 0x9000) {
-          this.transport = transport;
-          break;
-        } else if (ecode !== disconnectEcode) {
-          console.log('illegal error. ', ecode);
-          await this.close(transport);
-          break;
-        }
-      } catch (e) {
-        // console.log(`connection fail. count=${count}`, e);
-        const errText = e.toString();
-        if (errText.indexOf('DisconnectedDevice: Cannot write to HID device') >= 0) {
-          // disconnect error
-        } else if (errText.indexOf('TransportError: NoDevice') >= 0) {
-          // device connect error
-        } else if (errText.indexOf('cannot open device with path') >= 0) {
-          // device connect error
-        } else if (errText.indexOf('The device was disconnected') >= 0) {
-          // device connect error
-        } else if (errText.indexOf('Must be handling a user gesture to show a permission request') >= 0) {
-          // device connect error
-        } else if (errText.indexOf('No device selected.') >= 0) {
-          // disconnect error
-        } else {
-          console.warn(e);
-          console.log(`connection fail.(exception) count=${count}`, e);
-          ecode = 0x6000;
-          errMsg = errText;
-          break;
-        }
-      }
-      if (transport) await this.close(transport);
-      transport = undefined;
-      console.info(`connection fail. count=${count}`);
-      ++count;
-      if (count < waitLimit) await sleep(1000);
-    }
-
-    if (ecode === 0x9000) {
-      errMsg = '';
-    } else if (ecode === disconnectEcode) {
-      if (this.waitForConnecting) {
-        errMsg = 'connection fail.';
+    let execConnect = false;
+    if (this.isAccessing()) {
+      ecode = accessingEcode;
+      errMsg = accessingMsg;
+    } else if (this.transport) {
+      const connRet = await this.isConnected();
+      ecode = connRet.errorCode;
+      if (connRet.success === false) {
+        await this.disconnect();
+        execConnect = true;
       } else {
-        errMsg = 'connection cancel.';
+        errMsg = 'already connected.';
+      }
+    } else {
+      execConnect = true;
+    }
+
+    if (execConnect) {
+      ecode = disconnectEcode;
+      try {
+        this.accessing = true;
+        this.waitForConnecting = true;
+
+        while ((count <= waitLimit) && this.waitForConnecting) {
+          try {
+            // transport = await TransportNodeHid.open(path);
+            transport = await TransportWebUSB.create();
+
+            const ret = await checkConnect(transport, this.checkAppType);
+            ecode = ret.errorCode;
+            if (ecode === 0x9000) {
+              this.transport = transport;
+              this.currentApplication = ret.application;
+              break;
+            } else if (ecode !== disconnectEcode) {
+              console.log('illegal error. ', ecode);
+              await this.close(transport);
+              break;
+            }
+          } catch (e) {
+            // console.log(`connection fail. count=${count}`, e);
+            const errText = e.toString();
+            if (errText.indexOf('DisconnectedDevice: Cannot write to HID device') >= 0) {
+              // disconnect error
+            } else if (errText.indexOf('TransportError: NoDevice') >= 0) {
+              // device connect error
+            } else if (errText.indexOf('cannot open device with path') >= 0) {
+              // device connect error
+            } else if (errText.indexOf('The device was disconnected') >= 0) {
+              // device connect error
+            } else if (errText.indexOf('Must be handling a user gesture to show a permission request') >= 0) {
+              // device connect error
+            } else if (errText.indexOf('No device selected.') >= 0) {
+              // disconnect error
+            } else {
+              console.warn(e);
+              console.log(`connection fail.(exception) count=${count}`, e);
+              ecode = 0x6000;
+              errMsg = errText;
+              break;
+            }
+          }
+          if (transport) await this.close(transport);
+          transport = undefined;
+          console.info(`connection fail. count=${count}`);
+          ++count;
+          if (count < waitLimit) await sleep(1000);
+        }
+      } catch (err) {
+        // do nothing
+      } finally {
+        if (ecode === 0x9000) {
+          errMsg = '';
+        } else if (ecode === disconnectEcode) {
+          if (this.waitForConnecting) {
+            errMsg = 'connection fail.';
+          } else {
+            errMsg = 'connection cancel.';
+          }
+        }
+        this.accessing = false;
+        this.waitForConnecting = false;
       }
     }
-    this.waitForConnecting = false;
+
     return {
       success: (ecode === 0x9000),
       errorCode: ecode,
@@ -977,9 +1112,15 @@ const ledgerLiquidWrapper = class LedgerLiquidWrapper {
 
   async isConnected() {
     let ecode = disconnectEcode;
-    if (this.transport !== undefined) {
+    let errMsg = 'other error';
+    if (this.isAccessing()) {
+      // The connection with Ledger is valid because it is being accessed.
+      ecode = 0x9000;
+    } else if (this.transport !== undefined) {
       try {
-        ecode = await checkConnect(this.transport);
+        this.accessing = true;
+        const ret = await checkConnect(this.transport, this.checkAppType);
+        ecode = ret.errorCode;
       } catch (e) {
         const errText = e.toString();
         if (errText.indexOf('DisconnectedDevice: Cannot write to HID device') >= 0) {
@@ -995,11 +1136,14 @@ const ledgerLiquidWrapper = class LedgerLiquidWrapper {
         } else {
           console.log(`connection fail.(exception) `, e);
           ecode = 0x8000;
+          errMsg = errText;
         }
+      } finally {
+        this.accessing = false;
       }
       if (ecode !== 0x9000) this.disconnect();
     }
-    let errMsg = 'other error';
+
     if (ecode === 0x9000) {
       errMsg = '';
     } else if (ecode === disconnectEcode) {
@@ -1016,8 +1160,16 @@ const ledgerLiquidWrapper = class LedgerLiquidWrapper {
 
   async disconnect() {
     if (this.transport !== undefined) {
-      await this.close(this.transport);
-      this.transport = undefined;
+      try {
+        this.accessing = true;
+        await this.close(this.transport);
+        this.transport = undefined;
+      } catch (e) {
+        console.log(e);
+      } finally {
+        this.currentApplication = applicationType.Auto;
+        this.accessing = false;
+      }
     }
   }
 
@@ -1041,68 +1193,31 @@ const ledgerLiquidWrapper = class LedgerLiquidWrapper {
 
   async getWalletPublicKey(bip32Path) {
     let result = undefined;
-    const connRet = await this.isConnected();
-    let ecode = connRet.errorCode;
-    let errMsg = connRet.errorMessage;
-    if (connRet.success) {
-      // TODO(k-matsuzawa): notfound liquid option(0x10, 0x11)
-      const p2 = 1; // = 0x10;
-      // console.time('call getWalletPublicKey');
-      result = await getWalletPublicKey(
-          this.transport, bip32Path, p2);
-      // console.timeEnd('call getWalletPublicKey');
-      // console.log('getWalletPublicKey result =', result);
-      ecode = result.errorCode;
-      errMsg = (ecode === 0x9000) ? '' : 'other error';
-    }
-    return {
-      success: (ecode === 0x9000),
-      errorCode: ecode,
-      errorCodeHex: ecode.toString(16),
-      errorMessage: errMsg,
-      disconnect: connRet.disconnect,
-      publicKey: (!result) ? '' : compressPubkey(result.pubkey),
-      chainCode: (!result) ? '' : result.chainCode,
-    };
-  }
-
-  async getXpubKey(bip32Path) {
-    let xpub = undefined;
-    const connRet = await this.isConnected();
-    let ecode = connRet.errorCode;
-    let errMsg = connRet.errorMessage;
-    if (connRet.success) {
-      const p2 = 1; // = 0x10;
-      const parent = await getWalletPublicKey(
-          this.transport, bip32Path, p2, true);
-      ecode = parent.errorCode;
-      if (ecode !== 0x9000) {
-        errMsg = 'other error';
-      } else {
-        const pubkey = await getWalletPublicKey(
-            this.transport, bip32Path, p2);
-        ecode = parent.errorCode;
-        if (ecode !== 0x9000) {
-          errMsg = 'other error';
-        } else {
-          const pathArr = parseBip32Path(bip32Path).array;
-          xpub = createExtPubKey(
-              this.mainchainNetwork,
-              pathArr.length,
-              pathArr[pathArr.length - 1],
-              pubkey.chainCode,
-              compressPubkey(pubkey.pubkey),
-              compressPubkey(parent.pubkey));
-          //          const extkey = cfdjs.CreateExtkey({
-          //            network: this.mainchainNetwork,
-          //            extkeyType: 'extPubkey',
-          //            parentKey: compressPubkey(parent.pubkey),
-          //            key: compressPubkey(pubkey.pubkey),
-          //            chainCode: pubkey.chainCode,
-          //            depth: pathArr.length,
-          //            childNumber: pathArr[pathArr.length - 1],
-          //          });
-          //          xpub = extkey.extkey;
+    let connRet = undefined;
+    let ecode = accessingEcode;
+    let errMsg = accessingMsg;
+    if (this.isAccessing() === false) {
+      connRet = await this.isConnected();
+      ecode = connRet.errorCode;
+      errMsg = connRet.errorMessage;
+      if (connRet.success) {
+        try {
+          this.accessing = true;
+          // TODO(k-matsuzawa): notfound liquid option(0x10, 0x11)
+          const p2 = 1; // = 0x10;
+          // console.time('call getWalletPublicKey');
+          result = await getWalletPublicKey(
+              this.transport, bip32Path, p2);
+          // console.timeEnd('call getWalletPublicKey');
+          // console.log('getWalletPublicKey result =', result);
+          ecode = result.errorCode;
+          errMsg = (ecode === 0x9000) ? '' : 'other error';
+        } catch (e) {
+          console.log(e);
+          ecode = 0x8000;
+          errMsg = e.toString();
+        } finally {
+          this.accessing = false;
         }
       }
     }
@@ -1111,21 +1226,89 @@ const ledgerLiquidWrapper = class LedgerLiquidWrapper {
       errorCode: ecode,
       errorCodeHex: ecode.toString(16),
       errorMessage: errMsg,
-      disconnect: connRet.disconnect,
+      disconnect: (!connRet) ? false : connRet.disconnect,
+      publicKey: (!result) ? '' : compressPubkey(result.pubkey),
+      chainCode: (!result) ? '' : result.chainCode,
+    };
+  }
+
+  async getXpubKey(bip32Path) {
+    let xpub = undefined;
+    let connRet = undefined;
+    let ecode = accessingEcode;
+    let errMsg = accessingMsg;
+    if (this.isAccessing() === false) {
+      connRet = await this.isConnected();
+      ecode = connRet.errorCode;
+      errMsg = connRet.errorMessage;
+      if (connRet.success) {
+        try {
+          this.accessing = true;
+          const p2 = 1; // = 0x10;
+          const parent = await getWalletPublicKey(
+              this.transport, bip32Path, p2, true);
+          ecode = parent.errorCode;
+          if (ecode === 0x9000) {
+            const pubkey = await getWalletPublicKey(
+                this.transport, bip32Path, p2);
+            ecode = parent.errorCode;
+            if (ecode === 0x9000) {
+              ecode = 0x8000;
+              const pathArr = parseBip32Path(bip32Path).array;
+              xpub = createExtPubKey(
+                  this.mainchainNetwork,
+                  pathArr.length,
+                  pathArr[pathArr.length - 1],
+                  pubkey.chainCode,
+                  compressPubkey(pubkey.pubkey),
+                  compressPubkey(parent.pubkey));
+              ecode = 0x9000;
+            }
+          }
+          errMsg = (ecode === 0x9000) ? '' : 'other error';
+        } catch (e) {
+          console.log(e);
+          ecode = 0x8000;
+          errMsg = e.toString();
+        } finally {
+          this.accessing = false;
+        }
+      }
+    }
+    return {
+      success: (ecode === 0x9000),
+      errorCode: ecode,
+      errorCodeHex: ecode.toString(16),
+      errorMessage: errMsg,
+      disconnect: (!connRet) ? false : connRet.disconnect,
       xpubKey: (!xpub) ? '' : xpub,
     };
   }
 
   async setupHeadlessAuthorization(authorizationPublicKey) {
-    const connRet = await this.isConnected();
-    let ecode = connRet.errorCode;
-    let errMsg = connRet.errorMessage;
-    if (connRet.success) {
-      ecode = await liquidSetupHeadless(this.transport,
-          authorizationPublicKey);
-      errMsg = (ecode === 0x9000) ? '' : 'other error.';
-      if (ecode === 0x6985) {
-        errMsg = 'CONDITIONS_OF_USE_NOT_SATISFIED';
+    let connRet = undefined;
+    let ecode = accessingEcode;
+    let errMsg = accessingMsg;
+    if (this.isAccessing() === false) {
+      connRet = await this.isConnected();
+      ecode = connRet.errorCode;
+      errMsg = connRet.errorMessage;
+      if (connRet.success) {
+        try {
+          this.accessing = true;
+          ecode = await liquidSetupHeadless(this.transport,
+              authorizationPublicKey);
+          errMsg = (ecode === 0x9000) ? '' : 'other error.';
+          if (ecode === 0x6985) {
+            errMsg = 'CONDITIONS_OF_USE_NOT_SATISFIED';
+          }
+        } catch (e) {
+          console.log(e);
+          ecode = 0x8000;
+          errMsg = e.toString();
+        } finally {
+          this.accessing = false;
+        }
       }
     }
     return {
@@ -1154,162 +1337,180 @@ const ledgerLiquidWrapper = class LedgerLiquidWrapper {
   async getSignature(proposalTransaction,
       walletUtxoList, authorizationSignature) {
     const signatureList = [];
-    const connRet = await this.isConnected();
-    if (!connRet.success) {
+    let connRet = undefined;
+    let ecode = accessingEcode;
+    let errMsg = accessingMsg;
+    if (this.isAccessing() === false) {
+      connRet = await this.isConnected();
+      ecode = connRet.errorCode;
+      errMsg = connRet.errorMessage;
+    }
+    if (ecode !== 0x9000) {
       return {
-        success: connRet.success,
-        errorCode: connRet.errorCode,
-        errorCodeHex: connRet.errorCode.toString(16),
-        errorMessage: connRet.errorMessage,
-        disconnect: connRet.disconnect,
+        success: false,
+        errorCode: ecode,
+        errorCodeHex: ecode.toString(16),
+        errorMessage: errMsg,
+        disconnect: (!connRet) ? false : connRet.disconnect,
         signatureList: signatureList,
       };
     }
-    //    const dectx = cfdjs.ElementsDecodeRawTransaction({
-    //      hex: proposalTransaction, network: this.networkType,
-    //      mainchainNetwork: this.mainchainNetwork});
-    const dectx = decodeRawTransaction(proposalTransaction);
-    // console.log('*** dectx ***\n', JSON.stringify(dectx, null, '  '));
+    try {
+      this.accessing = true;
 
-    const amountValueList = [];
+      // const dectx = cfdjs.ElementsDecodeRawTransaction({
+      //   hex: proposalTransaction, network: this.networkType,
+      //   mainchainNetwork: this.mainchainNetwork});
+      const dectx = decodeRawTransaction(proposalTransaction);
+      // console.log('*** dectx ***\n', JSON.stringify(dectx, null, '  '));
 
-    const utxoList = walletUtxoList;
-    for (const txin of dectx.vin) {
-      let isFind = false;
-      for (const utxo of utxoList) {
-        if ((txin.txid === utxo.txid) && (txin.vout === utxo.vout)) {
-          let value = 0;
-          if ('valueCommitment' in utxo) {
-            value = utxo.valueCommitment;
-          } else if ('amount' in utxo) {
-            value = utxo.amount;
+      const amountValueList = [];
+      const utxoList = walletUtxoList;
+      for (const txin of dectx.vin) {
+        let isFind = false;
+        for (const utxo of utxoList) {
+          if ((txin.txid === utxo.txid) && (txin.vout === utxo.vout)) {
+            let value = 0;
+            if ('valueCommitment' in utxo) {
+              value = utxo.valueCommitment;
+            } else if ('amount' in utxo) {
+              value = utxo.amount;
+            }
+            amountValueList.push(value);
+            isFind = true;
+            break;
           }
-          amountValueList.push(value);
-          isFind = true;
-          break;
+        }
+        if (!isFind) {
+          // throw new Error('txin is not in the utxo list.');
+          amountValueList.push(1); // dummy amount
         }
       }
-      if (!isFind) {
-        // throw new Error('txin is not in the utxo list.');
-        amountValueList.push(1); // dummy amount
-      }
-    }
-    let ecode = 0x9000;
+      ecode = 0x9000;
 
-    const utxoScriptList = [];
-    // Collect redeemScript before startUntrustedTransaction
-    // because you need to call getWalletPublicKey.
-    for (const utxo of walletUtxoList) {
-      let targetIndex = -1;
-      for (let index = 0; index < dectx.vin.length; ++index) {
-        if ((dectx.vin[index].txid === utxo.txid) &&
-            (dectx.vin[index].vout === utxo.vout)) {
-          targetIndex = index;
-          break;
+      const utxoScriptList = [];
+      // Collect redeemScript before startUntrustedTransaction
+      // because you need to call getWalletPublicKey.
+      for (const utxo of walletUtxoList) {
+        let targetIndex = -1;
+        for (let index = 0; index < dectx.vin.length; ++index) {
+          if ((dectx.vin[index].txid === utxo.txid) &&
+              (dectx.vin[index].vout === utxo.vout)) {
+            targetIndex = index;
+            break;
+          }
         }
-      }
-      if (targetIndex === -1) {
-        throw new Error('wallet utxo is not in the txin list.');
+        if (targetIndex === -1) {
+          throw new Error('wallet utxo is not in the txin list.');
+        }
+
+        let redeemScript = '';
+        if (!utxo.descriptor && !utxo.redeemScript) {
+          // bip32 path -> pubkey -> lockingscript
+        } else if (!utxo.descriptor) {
+          redeemScript = utxo.redeemScript;
+        } else {
+          // const desc = cfdjs.ParseDescriptor({
+          //   isElements: true,
+          //   descriptor: utxo.descriptor,
+          //   network: this.networkType,
+          // });
+          // if (('scripts' in desc) && (desc.scripts.length > 0) &&
+          //      ('redeemScript' in desc.scripts[desc.scripts.length - 1])) {
+          //   redeemScript = desc.scripts[desc.scripts.length - 1].redeemScript;
+          // }
+        }
+
+        if (!redeemScript) {
+          if (!utxo.pubkey) {
+            const p2 = 1; // = 0x10;
+            const pubkeyRet = await getWalletPublicKey(
+                this.transport, utxo.bip32Path, p2);
+            // const pubkeyRet = await this.getWalletPublicKey(utxo.bip32Path);
+            ecode = pubkeyRet.errorCode;
+            if (ecode !== 0x9000) {
+              break;
+            }
+            const pubkey = compressPubkey(pubkeyRet.pubkey);
+            redeemScript = this.getPublicKeyRedeemScript(pubkey);
+          } else {
+            redeemScript = this.getPublicKeyRedeemScript(utxo.pubkey);
+          }
+        }
+        utxoScriptList.push({
+          redeemScript: redeemScript,
+          targetIndex: targetIndex,
+          utxo: utxo,
+        });
       }
 
-      let redeemScript = '';
-      if (!utxo.descriptor && !utxo.redeemScript) {
-        // bip32 path -> pubkey -> lockingscript
-      } else if (!utxo.descriptor) {
-        redeemScript = utxo.redeemScript;
-      } else {
-        //        const desc = cfdjs.ParseDescriptor({
-        //          isElements: true,
-        //          descriptor: utxo.descriptor,
-        //          network: this.networkType,
-        //        });
-        //        if (('scripts' in desc) && (desc.scripts.length > 0) &&
-        //            ('redeemScript' in desc.scripts[desc.scripts.length - 1])) {
-        //          redeemScript = desc.scripts[desc.scripts.length - 1].redeemScript;
-        //        }
+      // console.info('amountValueList =', amountValueList);
+      if (ecode === 0x9000) {
+        ecode = await startUntrustedTransaction(this.transport, dectx, false,
+            amountValueList, -1, '');
+      }
+      if (ecode === 0x9000) {
+        ecode = await liquidFinalizeInputFull(this.transport, dectx);
+      }
+      if (ecode === 0x9000) {
+        ecode = await liquidProvideIssuanceInformation(this.transport, dectx);
       }
 
-      if (!redeemScript) {
-        if (!utxo.pubkey) {
-          const pubkeyRet = await this.getWalletPublicKey(utxo.bip32Path);
-          ecode = pubkeyRet.errorCode;
+      if (ecode === 0x9000) {
+      // sighashtype: 1=all only
+        const sighashtype = 1;
+        for (const utxoData of utxoScriptList) {
+          ecode = await startUntrustedTransaction(this.transport, dectx,
+              true, amountValueList, utxoData.targetIndex,
+              utxoData.redeemScript);
           if (ecode !== 0x9000) {
             break;
           }
-          redeemScript = this.getPublicKeyRedeemScript(pubkeyRet.publicKey);
-        } else {
-          redeemScript = this.getPublicKeyRedeemScript(utxo.pubkey);
+          const signatureRet = await untrustedHashSign(this.transport, dectx,
+              utxoData.utxo.bip32Path, authorizationSignature, sighashtype);
+          ecode = signatureRet.errorCode;
+          if (ecode !== 0x9000) {
+            break;
+          }
+          signatureList.push({
+            utxoData: utxoData.utxo,
+            signature: signatureRet.signature,
+          });
         }
       }
-      utxoScriptList.push({
-        redeemScript: redeemScript,
-        targetIndex: targetIndex,
-        utxo: utxo,
-      });
-    }
-
-    // console.info('amountValueList =', amountValueList);
-    if (ecode === 0x9000) {
-      ecode = await startUntrustedTransaction(this.transport, dectx, false,
-          amountValueList, -1, '');
-    }
-    if (ecode === 0x9000) {
-      ecode = await liquidFinalizeInputFull(this.transport, dectx);
-    }
-    if (ecode === 0x9000) {
-      ecode = await liquidProvideIssuanceInformation(this.transport, dectx);
-    }
-
-    if (ecode === 0x9000) {
-      // sighashtype: 1=all only
-      const sighashtype = 1;
-      for (const utxoData of utxoScriptList) {
-        ecode = await startUntrustedTransaction(this.transport, dectx,
-            true, amountValueList, utxoData.targetIndex,
-            utxoData.redeemScript);
-        if (ecode !== 0x9000) {
-          break;
-        }
-        const signatureRet = await untrustedHashSign(this.transport, dectx,
-            utxoData.utxo.bip32Path, authorizationSignature, sighashtype);
-        ecode = signatureRet.errorCode;
-        if (ecode !== 0x9000) {
-          break;
-        }
-        signatureList.push({
-          utxoData: utxoData.utxo,
-          signature: signatureRet.signature,
-        });
+      errMsg = (ecode === 0x9000) ? '' : 'other error.';
+    } catch (e) {
+      console.log(e);
+      if (ecode === 0x9000) {
+        ecode = 0x8000;
       }
+      errMsg = e.toString();
+    } finally {
+      this.accessing = false;
     }
 
     return {
       success: (ecode === 0x9000),
       errorCode: ecode,
       errorCodeHex: ecode.toString(16),
-      errorMessage: (ecode === 0x9000) ? '' : 'other error.',
+      errorMessage: errMsg,
       disconnect: false,
       signatureList: signatureList,
     };
   }
 };
 
-const networkType = {
-  LiquidV1: 'liquidv1',
-  Regtest: 'regtest',
-};
-
-const addressType = {
-  Legacy: 'legacy',
-  P2shSegwit: 'p2sh-segwit',
-  Bech32: 'bech32',
-};
-
 module.exports = ledgerLiquidWrapper;
 module.exports.LedgerLiquidWrapper = ledgerLiquidWrapper;
-module.exports.NetworkType = networkType;
-module.exports.NetworkType.LiquidV1 = networkType.LiquidV1;
-module.exports.NetworkType.Regtest = networkType.Regtest;
+module.exports.NetworkType = networkTypeDefine;
+module.exports.NetworkType.LiquidV1 = networkTypeDefine.LiquidV1;
+module.exports.NetworkType.Regtest = networkTypeDefine.Regtest;
+module.exports.ApplicationType = currentApplicationType;
+module.exports.ApplicationType.LiquidHeadless =
+  currentApplicationType.LiquidHeadless;
+module.exports.ApplicationType.LiquidTestHeadless =
+  currentApplicationType.LiquidTestHeadless;
+module.exports.ApplicationType.Empty = currentApplicationType.Empty;
 module.exports.AddressType = addressType;
 module.exports.AddressType.Legacy = addressType.Legacy;
 module.exports.AddressType.P2shSegwit = addressType.P2shSegwit;
