@@ -1225,6 +1225,44 @@ const ledgerLiquidWrapper = class LedgerLiquidWrapper {
     }
   }
 
+  async getApplicationInfo() {
+    let result = undefined;
+    let connRet = undefined;
+    let ecode = accessingEcode;
+    let errMsg = accessingMsg;
+    if (this.isAccessing() === false) {
+      connRet = await this.isConnected();
+      ecode = connRet.errorCode;
+      errMsg = connRet.errorMessage;
+      if (connRet.success) {
+        try {
+          this.accessing = true;
+          result = await getFirmwareVersion(this.transport);
+          ecode = result.errorCode;
+          errMsg = (ecode === 0x9000) ? '' : 'other error';
+        } catch (e) {
+          console.log(e);
+          ecode = 0x8000;
+          errMsg = e.toString();
+        } finally {
+          this.accessing = false;
+        }
+      }
+    }
+    return {
+      success: (ecode === 0x9000),
+      errorCode: ecode,
+      errorCodeHex: ecode.toString(16),
+      errorMessage: errMsg,
+      disconnect: (!connRet) ? false : connRet.disconnect,
+      name: this.getCurrentApplication(),
+      flag: (!result) ? '' : result.flag,
+      architecture: (!result) ? '' : result.architecture,
+      version: (!result) ? '' : result.version,
+      loaderVersion: (!result) ? '' : result.loader,
+    };
+  }
+
   getPublicKeyRedeemScript(publicKey) {
     const pubkeyArr = Buffer.from(publicKey, 'hex');
     const hash160Buf = hash160(pubkeyArr);
