@@ -509,6 +509,52 @@ async function getCoinVersion(transport) {
   };
 }
 
+// GET FIRMWARE VERSION
+async function getFirmwareVersion(transport) {
+  const CLA = 0xe0;
+  const GET_FIRMWARE_VERSION = 0xc4;
+  const apdu = Buffer.from([CLA, GET_FIRMWARE_VERSION, 0, 0, 0]);
+  const exchangeRet = await transport.exchange(apdu);
+  const result = (exchangeRet.length <= 2) ? exchangeRet :
+    exchangeRet.subarray(exchangeRet.length - 2);
+  let version = '';
+  let flag = 0;
+  let architecture = 0;
+  let major = 0;
+  let minor = 0;
+  let patch = 0;
+  let loaderMajor = 0;
+  let loaderMinor = 0;
+  if (exchangeRet.length >= 5) {
+    flag = exchangeRet[0];
+    architecture = exchangeRet[1];
+    major = exchangeRet[2];
+    minor = exchangeRet[3];
+    patch = exchangeRet[4];
+    version = `${major}.${minor}.${patch}.`;
+    if (exchangeRet.length >= 7) {
+      loaderMajor = exchangeRet[5];
+      loaderMinor = exchangeRet[6];
+    }
+  }
+  return {
+    errorCode: convertErrorCode(result),
+    versionString: version,
+    flag: flag,
+    architecture: architecture,
+    version: {
+      major: major,
+      minor: minor,
+      patch: patch,
+    },
+    loader: {
+      major: loaderMajor,
+      minor: loaderMinor,
+      patch: 0,
+    },
+  };
+}
+
 async function liquidSetupHeadless(transport, authorizationPublicKeyHex) {
   const ADM_CLA = 0xd0;
   const LIQUID_SETUP_HEADLESS = 0x02;
@@ -1141,7 +1187,7 @@ const ledgerLiquidWrapper = class LedgerLiquidWrapper {
       } finally {
         this.accessing = false;
       }
-      if (ecode !== 0x9000) this.disconnect();
+      if (ecode !== 0x9000) await this.disconnect();
     }
 
     if (ecode === 0x9000) {
@@ -1251,7 +1297,7 @@ const ledgerLiquidWrapper = class LedgerLiquidWrapper {
           if (ecode === 0x9000) {
             const pubkey = await getWalletPublicKey(
                 this.transport, bip32Path, p2);
-            ecode = parent.errorCode;
+            ecode = pubkey.errorCode;
             if (ecode === 0x9000) {
               ecode = 0x8000;
               const pathArr = parseBip32Path(bip32Path).array;
@@ -1457,7 +1503,7 @@ const ledgerLiquidWrapper = class LedgerLiquidWrapper {
       }
 
       if (ecode === 0x9000) {
-      // sighashtype: 1=all only
+        // sighashtype: 1=all only
         const sighashtype = 1;
         for (const utxoData of utxoScriptList) {
           ecode = await startUntrustedTransaction(this.transport, dectx,
