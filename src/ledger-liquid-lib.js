@@ -1090,7 +1090,7 @@ const ledgerLiquidWrapper = class LedgerLiquidWrapper {
     this.connectAccessing = false;
     this.checkAppType = checkAppType;
     this.currentApplication = applicationType.Auto;
-    this.currentDevicePath = '';
+    // this.currentDevicePath = '';
     this.lastConnectTime = 0;
     this.lastConnectCheckTime = 0;
     // getSignature's state
@@ -1119,7 +1119,7 @@ const ledgerLiquidWrapper = class LedgerLiquidWrapper {
 
   getLastConnectionInfo() {
     return {
-      currentDevicePath: this.currentDevicePath,
+      // currentDevicePath: this.currentDevicePath,
       lastConnectTime: this.lastConnectTime,
     };
   }
@@ -1325,7 +1325,7 @@ const ledgerLiquidWrapper = class LedgerLiquidWrapper {
       } finally {
         this.currentApplication = applicationType.Auto;
         this.accessing = false;
-        this.currentDevicePath = '';
+        // this.currentDevicePath = '';
         this.lastConnectTime = 0;
       }
     }
