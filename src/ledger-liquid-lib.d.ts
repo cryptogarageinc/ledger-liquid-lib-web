@@ -17,6 +17,12 @@ export enum AddressType {
   Bech32 = 'bech32',
 }
 
+export enum GetSignatureState {
+  AnalyzeUtxo = 'analyzeUtxo', // Preparation before 'input transaction'
+  InputTx = 'inputTx', // input transaction to ledger
+  GetSignature = 'getSignature', // request getSignature to ledger
+}
+
 export interface UtxoData {
   txid: string; // key(outpoint)
   vout: number; // key(outpoint)
@@ -43,6 +49,10 @@ export interface ResponseInfo {
   errorCodeHex: string;
   errorMessage: string;
   disconnect: boolean;
+}
+
+export interface ConnectionInfo {
+  lastConnectTime: number;
 }
 
 export interface GetApplicationInfoResponse extends ResponseInfo {
@@ -75,8 +85,25 @@ export interface GetSignatureAddressResponse extends ResponseInfo {
   signatureList: SignatureData[];
 }
 
-export interface GetDeviceListResponse extends ResponseInfo {
-  deviceList: string[];
+export interface ProgressInfo {
+  current: number;
+  total: number;
+}
+
+export interface CalculateSignatureProgress extends ResponseInfo {
+  analyzeUtxo: ProgressInfo;
+  inputTx: ProgressInfo;
+  getSignature: ProgressInfo;
+  total: ProgressInfo;
+}
+
+export interface GetSignatureProgress extends ResponseInfo {
+  currentState: GetSignatureState;
+  analyzeUtxo: ProgressInfo;
+  inputTx: ProgressInfo;
+  getSignature: ProgressInfo;
+  total: ProgressInfo;
+  lastAccessTime: number;
 }
 
 export class LedgerLiquidWrapper {
@@ -95,11 +122,14 @@ export class LedgerLiquidWrapper {
   getCurrentApplication(): ApplicationType;
 
   /**
-   * get usb device list.
+   * Get last connection information.
    *
-   * @return GetDeviceListResponse wrapped promise.
+   * attention: using after connect or isConnected.
+   * current API is only get last connection info.
+   *
+   * @return ConnectionInfo.
    */
-  getDeviceList(): Promise<GetDeviceListResponse>;
+  getLastConnectionInfo(): ConnectionInfo;
 
   /**
    * Check if it is accessing Ledger.
@@ -181,7 +211,6 @@ export class LedgerLiquidWrapper {
    * @param proposalTransaction         proposal transaction.
    * @param walletUtxoList              sign target utxo list.
    * @param authorizationSignature      authorization signature (from backend).
-   * @param sigHashType                 signature hash type.
    * @returns GetSignatureAddressResponse wrapped promise.
    */
   getSignature(
@@ -189,4 +218,23 @@ export class LedgerLiquidWrapper {
     walletUtxoList: WalletUtxoData[], // sign target utxo list.
     authorizationSignature: string, // authorization signature (from backend)
   ): Promise<GetSignatureAddressResponse>;
+
+  /**
+   * Get state and progress of getSignature.
+   *
+   * @returns GetSignatureProgress.
+   */
+  getSignatureState(): GetSignatureProgress;
+
+  /**
+   * Calculate getSignature progress.
+   *
+   * @param proposalTransaction         proposal transaction.
+   * @param walletUtxoList              sign target utxo list.
+   * @returns CalculateSignatureProgress
+   */
+  calcSignatureProgress(
+    proposalTransaction: string, // proposal transaction.
+    walletUtxoList: WalletUtxoData[], // sign target utxo list.
+  ): CalculateSignatureProgress;
 }
