@@ -419,7 +419,12 @@ function splitByteArray255(byteArray) {
   for (let offset = 0; offset < byteArray.length; offset += 255) {
     const maxOffset = (byteArray.length > (offset + 255)) ?
        (offset + 255) : byteArray.length;
-    array.push(byteArray.subarray(offset, maxOffset));
+    const buffer = Buffer.allocUnsafe(maxOffset - offset);
+    for (let index = 0; index < (maxOffset - offset); ++index) {
+      buffer[index] = byteArray[offset + index];
+    }
+    array.push(buffer);
+    // array.push(byteArray.subarray(offset, maxOffset));
   }
   return array;
 }
@@ -1119,28 +1124,6 @@ const ledgerLiquidWrapper = class LedgerLiquidWrapper {
     };
   }
 
-  async getDeviceList() {
-    let devList = [];
-    let ecode = disconnectEcode;
-    let errMsg = 'other error';
-    try {
-      // devList = await TransportNodeHid.list();
-      devList = await TransportWebUSB.list();
-      ecode = 0x9000;
-      errMsg = '';
-    } catch (e) {
-      console.log(e);
-    }
-    return {
-      success: (ecode === 0x9000),
-      errorCode: ecode,
-      errorCodeHex: ecode.toString(16),
-      errorMessage: errMsg,
-      disconnect: false,
-      deviceList: devList,
-    };
-  }
-
   isAccessing() {
     return this.accessing;
   }
@@ -1188,12 +1171,12 @@ const ledgerLiquidWrapper = class LedgerLiquidWrapper {
               this.transport = transport;
               this.currentApplication = ret.application;
               this.lastConnectCheckTime = Date.now();
-              if (!path) {
-                const devList = await TransportNodeHid.list();
-                this.currentDevicePath = (!devList) ? '' : devList[0];
-              } else {
-                this.currentDevicePath = path;
-              }
+              // if (!path) {
+              //   const devList = await TransportNodeHid.list();
+              //   this.currentDevicePath = (!devList) ? '' : devList[0];
+              // } else {
+              //   this.currentDevicePath = path;
+              // }
               this.lastConnectTime = Date.now();
               break;
             } else if (ecode !== disconnectEcode) {

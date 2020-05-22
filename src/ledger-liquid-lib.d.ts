@@ -52,7 +52,6 @@ export interface ResponseInfo {
 }
 
 export interface ConnectionInfo {
-  currentDevicePath: string;
   lastConnectTime: number;
 }
 
@@ -84,10 +83,6 @@ export interface SignatureData {
 
 export interface GetSignatureAddressResponse extends ResponseInfo {
   signatureList: SignatureData[];
-}
-
-export interface GetDeviceListResponse extends ResponseInfo {
-  deviceList: string[];
 }
 
 export interface ProgressInfo {
@@ -135,13 +130,6 @@ export class LedgerLiquidWrapper {
    * @return ConnectionInfo.
    */
   getLastConnectionInfo(): ConnectionInfo;
-
-  /**
-   * get usb device list.
-   *
-   * @return GetDeviceListResponse wrapped promise.
-   */
-  getDeviceList(): Promise<GetDeviceListResponse>;
 
   /**
    * Check if it is accessing Ledger.
