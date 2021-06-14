@@ -141,7 +141,7 @@ function createExtPubKey(
     version, depthStr, fingerprint, childStr, chainCode, publicKey,
   ].join('');
   return encodeBase58Check(Buffer.from(xpubHex, 'hex'));
-};
+}
 
 function readVarIntFromBuffer(buffer, startOffset) {
   let result;
@@ -312,7 +312,6 @@ function decodeRawTransaction(proposalTx) {
     vin: txin,
     vout: txout,
   };
-  ;
 }
 
 // ---- ledger-liquid-lib ----
@@ -1203,6 +1202,8 @@ const ledgerLiquidWrapper = class LedgerLiquidWrapper {
             const errText = e.toString();
             if (errText.indexOf('DisconnectedDevice: Cannot write to HID device') >= 0) {
               // disconnect error
+            } else if (errText.indexOf('TypeError: Cannot write to hid device') >= 0) {
+              // disconnect error
             } else if (errText.indexOf('TransportError: NoDevice') >= 0) {
               // device connect error
             } else if (errText.indexOf('cannot open device with path') >= 0) {
@@ -1292,6 +1293,8 @@ const ledgerLiquidWrapper = class LedgerLiquidWrapper {
       } catch (e) {
         const errText = e.toString();
         if (errText.indexOf('DisconnectedDevice: Cannot write to HID device') >= 0) {
+          // disconnect error
+        } else if (errText.indexOf('TypeError: Cannot write to hid device') >= 0) {
           // disconnect error
         } else if (errText.indexOf('TransportError: NoDevice') >= 0) {
           // device connect error
