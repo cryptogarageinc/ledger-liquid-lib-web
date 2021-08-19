@@ -1202,6 +1202,8 @@ const ledgerLiquidWrapper = class LedgerLiquidWrapper {
             const errText = e.toString();
             if (errText.indexOf('DisconnectedDevice: Cannot write to HID device') >= 0) {
               // disconnect error
+            } else if (errText.indexOf('DisconnectedDeviceDuringOperation: Cannot write to hid device') >= 0) {
+              // disconnect error
             } else if (errText.indexOf('TypeError: Cannot write to hid device') >= 0) {
               // disconnect error
             } else if (errText.indexOf('TransportError: NoDevice') >= 0) {
@@ -1293,6 +1295,8 @@ const ledgerLiquidWrapper = class LedgerLiquidWrapper {
       } catch (e) {
         const errText = e.toString();
         if (errText.indexOf('DisconnectedDevice: Cannot write to HID device') >= 0) {
+          // disconnect error
+        } else if (errText.indexOf('DisconnectedDeviceDuringOperation: Cannot write to hid device') >= 0) {
           // disconnect error
         } else if (errText.indexOf('TypeError: Cannot write to hid device') >= 0) {
           // disconnect error
