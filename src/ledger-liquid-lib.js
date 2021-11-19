@@ -616,18 +616,46 @@ async function sendHashInputFinalizeFullCmd(transport, p1, p2, data) {
   // No need to divide because the transmission data unit is small.
   const CLA = 0xe0;
   const HASH_INPUT_FINALIZE_FULL = 0x4a;
-  const apdu = Buffer.concat(
-      [Buffer.from([CLA, HASH_INPUT_FINALIZE_FULL, p1, p2]),
-        Buffer.from([data.length]), data]);
-  debugSendLog('sendHashInputFinalizeFullCmd send -> ', apdu);
-  const exchangeRet = await transport.exchange(apdu);
-  const result = (exchangeRet.length <= 2) ? exchangeRet :
-    exchangeRet.subarray(exchangeRet.length - 2);
-  const resultData = (exchangeRet.length <= 2) ? Buffer.alloc(0) :
-    exchangeRet.subarray(0, exchangeRet.length - 2);
-  const ecode = convertErrorCode(result);
-  if (ecode != 0x9000) {
-    // console.log('sendHashInputFinalizeFullCmd recv: ', exchangeRet.toString('hex'));
+  if (data.length < 0xa0) {
+    const apdu = Buffer.concat(
+        [Buffer.from([CLA, HASH_INPUT_FINALIZE_FULL, p1, p2]),
+          Buffer.from([data.length]), data]);
+    debugSendLog('sendHashInputFinalizeFullCmd send -> ', apdu);
+    const exchangeRet = await transport.exchange(apdu);
+    const result = (exchangeRet.length <= 2) ? exchangeRet :
+      exchangeRet.subarray(exchangeRet.length - 2);
+    const resultData = (exchangeRet.length <= 2) ? Buffer.alloc(0) :
+      exchangeRet.subarray(0, exchangeRet.length - 2);
+    const ecode = convertErrorCode(result);
+    if (ecode != 0x9000) {
+      // console.log('sendHashInputFinalizeFullCmd recv: ', byteToHexString(exchangeRet));
+    }
+    return {data: resultData, errorCode: ecode};
+  }
+
+  const dataArray = splitByteArray190(data);
+  let ecode = 0x9000;
+  let resultData = Buffer.alloc(0);
+  for (const index in dataArray) {
+    if (!dataArray[index]) {
+      continue;
+    }
+    const inputData = dataArray[index];
+    const sendP1 = ((dataArray.length - 1) == index) ? p1 : 0x00;
+    const apdu = Buffer.concat(
+        [Buffer.from([CLA, HASH_INPUT_FINALIZE_FULL, sendP1, p2]),
+          Buffer.from([inputData.length]), inputData]);
+    debugSendLog('sendHashInputFinalizeFullCmd send -> ', apdu);
+    const exchangeRet = await transport.exchange(apdu);
+    const result = (exchangeRet.length <= 2) ? exchangeRet :
+      exchangeRet.subarray(exchangeRet.length - 2);
+    resultData = (exchangeRet.length <= 2) ? Buffer.alloc(0) :
+      exchangeRet.subarray(0, exchangeRet.length - 2);
+    ecode = convertErrorCode(result);
+    if (ecode != 0x9000) {
+      // console.log('sendHashInputFinalizeFullCmd recv: ', byteToHexString(exchangeRet));
+      break;
+    }
   }
   return {data: resultData, errorCode: ecode};
 }
