@@ -428,6 +428,21 @@ function splitByteArray255(byteArray) {
   return array;
 }
 
+function splitByteArray190(byteArray) {
+  const array = [];
+  for (let offset = 0; offset < byteArray.length; offset += 190) {
+    const maxOffset = (byteArray.length > (offset + 190)) ?
+       (offset + 190) : byteArray.length;
+    const buffer = Buffer.allocUnsafe(maxOffset - offset);
+    for (let index = 0; index < (maxOffset - offset); ++index) {
+      buffer[index] = byteArray[offset + index];
+    }
+    array.push(buffer);
+    // array.push(byteArray.subarray(offset, maxOffset));
+  }
+  return array;
+}
+
 // GET WALLET PUBLIC KEY
 async function getWalletPublicKey(
     transport, path, option, parent = false) {
