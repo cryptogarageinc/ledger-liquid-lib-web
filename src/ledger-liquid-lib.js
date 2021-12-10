@@ -141,7 +141,7 @@ function createExtPubKey(
     version, depthStr, fingerprint, childStr, chainCode, publicKey,
   ].join('');
   return encodeBase58Check(Buffer.from(xpubHex, 'hex'));
-};
+}
 
 function readVarIntFromBuffer(buffer, startOffset) {
   let result;
@@ -312,7 +312,6 @@ function decodeRawTransaction(proposalTx) {
     vin: txin,
     vout: txout,
   };
-  ;
 }
 
 // ---- ledger-liquid-lib ----
@@ -333,7 +332,7 @@ function getVarIntBuffer(num) {
     buf = writeUInt32LE(buf, num, 1);
   } else {
     buf = Buffer.from([0xff, 0, 0, 0, 0, 0, 0, 0, 0]);
-    const high = num >> 32;
+    const high = Math.floor(num / 0x100000000);
     const low = num & 0xffffffff;
     buf = writeUInt32LE(buf, low, 1);
     buf = writeUInt32LE(buf, high, 5);
@@ -348,12 +347,12 @@ function convertValueFromAmount(amount) {
   let low;
   if (typeof amount === 'bigint') {
     const bigHigh = (amount > BigInt(0xffffffff)) ?
-        (amount >> BigInt(32)) : BigInt(0);
+        (amount / BigInt(0x100000000)) : BigInt(0);
     const bigLow = amount & BigInt(0xffffffff);
     high = Number(bigHigh);
     low = Number(bigLow);
   } else {
-    high = (amount > 0xffffffff) ? (amount >> 32) : 0;
+    high = (amount > 0xffffffff) ? Math.floor(amount / 0x100000000) : 0;
     low = amount & 0xffffffff;
   }
   value = writeUInt32BE(value, high, 1);
