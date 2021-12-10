@@ -77,7 +77,7 @@ function readUInt64BE(buf, offset) {
   }
   result = readUInt32BE(buf, offset) * 0x100000000;
   result += readUInt32BE(buf, offset + 4);
-  return result >>> 0;
+  return result;
 }
 
 function writeUInt16LE(buf, value, offset) {
@@ -337,7 +337,7 @@ function getVarIntBuffer(num) {
   } else {
     buf = Buffer.from([0xff, 0, 0, 0, 0, 0, 0, 0, 0]);
     const high = Math.floor(num / 0x100000000);
-    const low = num & 0xffffffff;
+    const low = num % 0x100000000;
     buf = writeUInt32LE(buf, low, 1);
     buf = writeUInt32LE(buf, high, 5);
   }
@@ -352,12 +352,12 @@ function convertValueFromAmount(amount) {
   if (typeof amount === 'bigint') {
     const bigHigh = (amount > BigInt(0xffffffff)) ?
         (amount / BigInt(0x100000000)) : BigInt(0);
-    const bigLow = amount & BigInt(0xffffffff);
+    const bigLow = amount % BigInt(0x100000000);
     high = Number(bigHigh);
     low = Number(bigLow);
   } else {
     high = (amount > 0xffffffff) ? Math.floor(amount / 0x100000000) : 0;
-    low = amount & 0xffffffff;
+    low = amount % 0x100000000;
   }
   value = writeUInt32BE(value, high, 1);
   value = writeUInt32BE(value, low, 5);
