@@ -58,19 +58,25 @@ function readUInt32LE(buf, offset) {
   return result >>> 0;
 }
 
+function readUInt32BE(buf, offset) {
+  let result = 0;
+  if (buf.length <= offset + 3) {
+    throw Error('offset range error.');
+  }
+  result |= buf[offset] << 24;
+  result |= buf[offset + 1] << 16;
+  result |= buf[offset + 2] << 8;
+  result |= buf[offset + 3];
+  return result >>> 0;
+}
+
 function readUInt64BE(buf, offset) {
   let result = 0;
   if (buf.length <= offset + 7) {
     throw Error('offset range error.');
   }
-  result |= buf[offset + 7];
-  result |= buf[offset + 6] << 8;
-  result |= buf[offset + 5] << 16;
-  result |= buf[offset + 4] << 24;
-  result |= buf[offset + 3] << 32;
-  result |= buf[offset + 2] << 40;
-  result |= buf[offset + 1] << 48;
-  result |= buf[offset] << 56;
+  result = readUInt32BE(buf, offset) * 0x100000000;
+  result += readUInt32BE(buf, offset + 4);
   return result >>> 0;
 }
 
@@ -155,10 +161,8 @@ function readVarIntFromBuffer(buffer, startOffset) {
     result = readUInt32LE(buffer, startOffset + 1);
     size = 5;
   } else {
-    const high = buffer.subarray(startOffset + 1, startOffset + 1 + 4);
-    const low = buffer.subarray(startOffset + 5, startOffset + 5 + 4);
-    result = readUInt32LE(high, 0) << 32;
-    result |= readUInt32LE(low, 0);
+    result = readUInt32LE(buffer, startOffset + 5) * 0x100000000;
+    result += readUInt32LE(buffer, startOffset + 1);
     size = 9;
   }
   return {value: result, size: size};
