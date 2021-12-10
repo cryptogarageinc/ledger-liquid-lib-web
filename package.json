@@ -1,6 +1,6 @@
 {
   "name": "ledger-liquid-lib-web",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Ledger Hardware Wallet Liquid Wrapper Library for web",
   "keywords": [
     "Ledger",
@@ -20,22 +20,22 @@
   "types": "./src/ledger-liquid-lib.d.ts",
   "dependencies": {
     "@ledgerhq/hw-transport-webusb": "^6.11.2",
-    "@types/node": "^16.11.9",
+    "@types/node": "^16.11.12",
     "big-integer": "^1.6.51",
     "bs58": "^4.0.1",
     "ripemd160": "^2.0.2",
     "sha.js": "^2.4.11"
   },
   "devDependencies": {
-    "@typescript-eslint/eslint-plugin": "^5.4.0",
-    "@typescript-eslint/parser": "^5.4.0",
-    "eslint": "^8.2.0",
+    "@typescript-eslint/eslint-plugin": "^5.6.0",
+    "@typescript-eslint/parser": "^5.6.0",
+    "eslint": "^8.4.1",
     "eslint-config-google": "^0.14.0",
     "npm-run-all": "^4.1.5",
     "run-script-os": "^1.1.6",
     "ts-node": "^10.4.0",
-    "typescript": "^4.5.2",
-    "typescript-json-schema": "^0.51.0"
+    "typescript": "^4.5.3",
+    "typescript-json-schema": "^0.52.0"
   },
   "scripts": {
     "format": "eslint --ext .js *.js src/ --fix",
