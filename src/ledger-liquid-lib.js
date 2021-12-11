@@ -58,20 +58,26 @@ function readUInt32LE(buf, offset) {
   return result >>> 0;
 }
 
+function readUInt32BE(buf, offset) {
+  let result = 0;
+  if (buf.length <= offset + 3) {
+    throw Error('offset range error.');
+  }
+  result |= buf[offset] << 24;
+  result |= buf[offset + 1] << 16;
+  result |= buf[offset + 2] << 8;
+  result |= buf[offset + 3];
+  return result >>> 0;
+}
+
 function readUInt64BE(buf, offset) {
   let result = 0;
   if (buf.length <= offset + 7) {
     throw Error('offset range error.');
   }
-  result |= buf[offset + 7];
-  result |= buf[offset + 6] << 8;
-  result |= buf[offset + 5] << 16;
-  result |= buf[offset + 4] << 24;
-  result |= buf[offset + 3] << 32;
-  result |= buf[offset + 2] << 40;
-  result |= buf[offset + 1] << 48;
-  result |= buf[offset] << 56;
-  return result >>> 0;
+  result = readUInt32BE(buf, offset) * 0x100000000;
+  result += readUInt32BE(buf, offset + 4);
+  return result;
 }
 
 function writeUInt16LE(buf, value, offset) {
@@ -155,10 +161,8 @@ function readVarIntFromBuffer(buffer, startOffset) {
     result = readUInt32LE(buffer, startOffset + 1);
     size = 5;
   } else {
-    const high = buffer.subarray(startOffset + 1, startOffset + 1 + 4);
-    const low = buffer.subarray(startOffset + 5, startOffset + 5 + 4);
-    result = readUInt32LE(high, 0) << 32;
-    result |= readUInt32LE(low, 0);
+    result = readUInt32LE(buffer, startOffset + 5) * 0x100000000;
+    result += readUInt32LE(buffer, startOffset + 1);
     size = 9;
   }
   return {value: result, size: size};
@@ -333,7 +337,7 @@ function getVarIntBuffer(num) {
   } else {
     buf = Buffer.from([0xff, 0, 0, 0, 0, 0, 0, 0, 0]);
     const high = Math.floor(num / 0x100000000);
-    const low = num & 0xffffffff;
+    const low = num % 0x100000000;
     buf = writeUInt32LE(buf, low, 1);
     buf = writeUInt32LE(buf, high, 5);
   }
@@ -348,12 +352,12 @@ function convertValueFromAmount(amount) {
   if (typeof amount === 'bigint') {
     const bigHigh = (amount > BigInt(0xffffffff)) ?
         (amount / BigInt(0x100000000)) : BigInt(0);
-    const bigLow = amount & BigInt(0xffffffff);
+    const bigLow = amount % BigInt(0x100000000);
     high = Number(bigHigh);
     low = Number(bigLow);
   } else {
     high = (amount > 0xffffffff) ? Math.floor(amount / 0x100000000) : 0;
-    low = amount & 0xffffffff;
+    low = amount % 0x100000000;
   }
   value = writeUInt32BE(value, high, 1);
   value = writeUInt32BE(value, low, 5);
